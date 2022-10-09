@@ -1,0 +1,255 @@
+\section{MyBatis 的 XML 使用方式}
+
+\subsection{使用纯 XML 方式}
+
+使用纯 XML 方式开发需要经历以下几个步骤:
+\begin{itemize}
+    \item 配置: 编写 mybatis-config.xml 配置文件。
+    \item 映射: 编写 mapper 文件，统一管理 sql 语句。
+    \item 编码: 在程序中获取并执行 SqlSession 语句。
+\end{itemize}
+
+\subsubsection{mybatis-config 配置文件}
+
+使用 XML 形式进行配置，需要在 src/main/resources 下创建 mybatis-config.xml 文件\footnote{该配置来自MyBatis官网，包含了必要的配置信息，详细标签: \url{https://mybatis.net.cn/configuration.html}}:
+
+\begin{xml}
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE configuration
+        PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-config.dtd">
+<configuration>
+    <environments default="development">
+        <environment id="development">
+            <transactionManager type="JDBC"/>
+            <dataSource type="POOLED">
+                <property name="driver" value="${driver}"/>
+                <property name="url" value="${url}"/>
+                <property name="username" value="${username}"/>
+                <property name="password" value="${password}"/>
+            </dataSource>
+        </environment>
+    </environments>
+    <mappers>
+        <mapper resource="org/mybatis/example/BlogMapper.xml"/>
+    </mappers>
+</configuration>
+\end{xml}
+
+其中，<environments> 配置了数据库连接，<mappers> 中包含了一个 MyBatis 的 SQL 语句和映射配置文件，我们需要在对应的路径下创建映射文件，默认的，使用 Mapper 作为结尾(下文 mapper 文件就指的是 mybatis 的映射 xml 文件)。开发者可以根据需求修改或增添配置文件内容。
+
+除此之外，我们还可以在 <configuration> 内添加下面这些元素:
+
+\begin{xml}
+<!-- 包别名，可以避免繁琐的完全限定名 -->
+<typeAliases>
+    <package name="learn.mybatis.simple.model"/>
+</typeAliases>
+
+<!-- 单独配置 sql 并引入 -->
+<properties resource="sql.properties"/>
+
+<!-- 使用日志 -->
+<settings>
+    <setting name="logImpl" value="LOG4J"/>
+</settings>
+\end{xml}
+
+\subsubsection{mapper 映射文件}
+
+在对应的映射文件中，我们可以添加自定义 sql 语句, 下面是一个例子:
+
+\begin{xml}
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.mybatis.example.BlogMapper">
+    <select id="selectAll" resultType="Country">
+        select id, country_name, country_code from country
+    </select>
+</mapper>
+\end{xml}
+
+其中，<mapper> 是根元素，后面紧跟当前 xml 的命名空间。<select> 代表这是一个查询操作，id 是唯一标识，resultType 对应我们自己写的实体类。相应的，我们还可以使用 update, delete 等其他元素，这里不一一介绍。
+
+有了这些配置，我们就可以在代码中进行操作了:
+
+\begin{Java}
+// 通过 xml 获取 SessionFactory
+Reader reader = Resources.getResourcesAsReader("mybatis-config.xml")
+SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(reader);
+reader.close();
+// 通过 SessionFactory 使用已书写的 sql 语句
+SqlSession sqlSession = sqlSessionFactory.openSession();
+List<Country> countryList = sqlSession.selectList("selectAll");
+sqlSession.close();
+\end{Java}
+
+上述方式是完全使用 xml 来配置 Mybatis, 这种方式已经不常用了，下文不再说明， MyBatis3 提供了接口来调用方法。
+
+\subsection{Mapper 代理开发}
+
+Mapper 代理开发是指结合映射文件与接口的开发方式，它不需要通过字面值(上文的 selectAll)这种硬编码方式执行，安全性更高，更加面向接口编程，可以看作是 MyBatis3 对 XML 方式的一种改进，是目前主流的开发方式之一。
+
+如果映射文件过多，我们还可以在 <mappers> 中使用 <package> 元素包含对应包下的所有映射文件。下面两种写法效果相同:
+
+使用这种方式开发需要经历以下几步:
+\begin{itemize}
+    \item 配置: 编写 mybatis-config.xml 配置文件，定义与映射文件名相同的 Mapper 接口，并且映射文件和接口文件必须在同一目录下。
+    \item 映射: 设置映射文件的名称空间为 Mapper 接口的完全限定名。
+    \item 接口: 在接口中定义方法，方法名就是映射文件中的 id, 保持参数类型和返回值类型一致。
+    \item 编码: 通过 SqlSession 获取 Mapper 接口的代理对象并执行 sql 操作。
+\end{itemize}
+
+在配置过程中，使用代理开发的多个同目录的 mapper 映射可以改用 package 元素同一加载:
+
+\begin{xml}
+<mappers>
+    <mapper resource="learn/mybatis/simple/mapper/UserMapper.xml"/>
+    <mapper resource="learn/mybatis/simple/mapper/RoleMapper.xml"/>
+    <mapper resource="learn/mybatis/simple/mapper/PrivilegeMapper.xml"/>
+    <mapper resource="learn/mybatis/simple/mapper/UserRoleMapper.xml"/>
+    <mapper resource="learn/mybatis/simple/mapper/RolePrivilegeMapper.xml"/>
+</mappers>
+<!-- 等效写法 -->
+<mappers>
+    <package name="learn/mybatis/simple/mapper"/>
+</mappers>
+\end{xml}
+
+这种配置方法会先查找对应 java 包下的所有接口，并加载接口对应的 XML 映射文件。
+
+同样，mapper 文件的 namespace 也需要修改:
+
+\begin{xml}
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="learn.mybatis.simple.mapper.PrivilegeMapper"/>
+\end{xml}
+
+\subsection{SELECT 用法}
+
+\subsubsection{查询单个结果}
+
+首先的，我们需要在 UserMapper.java 接口中声明 SELECT 方法，例如:
+\begin{Java}
+public interface UserMapper {
+    SysUser selectById(long id);
+}
+\end{Java}
+
+然后在对应的 UserMapper.xml 中添加下面代码:
+
+\begin{xml}
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="learn.mybatis.simple.mapper.UserMapper">
+    <resultMap id="userMap" type="learn.mybatis.simple.mapper.SysUser">
+        <id property="id" column="id"/>
+        <result property="userName" column="user_name"/>
+        <result property="userPassword" column="user_password"/>
+        <result property="userEmail" column="user_email"/>
+        <result property="userInfo" column="user_info"/>
+        <result property="headImg" column="head_img" jdbcType="BLOB"/>
+        <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+    
+    <select id="selectById" resultMap="userMap">
+        select * from sys_user where id = #{id}
+    </select>
+</mapper>
+\end{xml}
+
+那么映射和接口文件/方法是怎么样绑定的呢?
+\begin{itemize}
+    \item 文件: 通过映射文件的 namespace 设置为接口的全限定名进行关联。如果不使用接口，则 namespace 可以随便写。
+    \item 方法: 通过 <select> 标签的 id 属性值绑定。
+\end{itemize}
+
+映射文件中重要的标签和属性:
+\begin{itemize}
+    \item <select>: 映射查询语句使用的标签，id 属性与接口中的方法名对应。
+    \item <resultMap>: 设置返回值的类型和映射关系。
+    \item ＃{id}: MyBatis SQL中使用预编译参数的一种方式，大括号中的id是传入的参数名。
+\end{itemize}
+
+其中 <resultMap> 是最为重要的标签，它所包含的标签如下:
+\begin{itemize}
+    \item <constructor>: 配置使用构造方法注入结果，包含以下两个子标签。
+    \begin{itemize}
+        \item <idArg>: id 参数，标记结果作为 id，可以帮助提高性能。
+        \item <arg>: 注入到构造方法的一个普通结果。
+    \end{itemize}
+    \item <id>: 一个 id 结果，标记结果作为 id, 可以帮助提高性能。
+    \item <result>: 注入到 Java 对象属性的普通结果。
+    \item <association>: 一个复杂的类型关联，许多结果将包成这种类型。
+    \item <collection>: 复杂类型的集合。
+    \item <discriminator>: 根据结果值来决定使用哪个结果映射。
+    \item <case>: 基于某些值的结果映射。
+\end{itemize}
+
+更多标签的作用请查看官网文档，这里不再说明。
+
+\subsubsection{查询多个结果}
+
+加入我们查询的结果不是单个对象而是对象集，例如在 UserMapper.java 中添加如下方法:
+
+\begin{Java}
+List<SysUser> selectAll();
+\end{Java}
+
+对应的映射文件需要添加如下代码:
+
+\begin{xml}
+<select id="selectAll" resultType="learn.mybatis.simple.model.SysUser">
+    SELECT id,
+           user_name     userName,
+           user_password userPassword,
+           user_email    userEmail,
+           user_info     userInfo,
+           head_img      headImg,
+           create_time   createTime
+    FROM sys_user
+</select>
+\end{xml}
+
+当返回结果大于1个时，必须使用 List<SysUser> 或 SysUser[] 作为返回类型，否则会抛 TooManyResultsException 异常。 
+
+此外，在映射文件中我们使用了 resultType 返回结果类型，配合别名可以实现类型的自动映射，而不需要手动设置 <resultMap>
+
+\paragraph*{名称映射规则} 如前文所述，MyBatis 有两种名称映射规则:
+\begin{itemize}
+    \item 通过 resultMap 手动设置结果类型。
+    \item 通过 SQL 别名配合 resultType 实现类型自动映射。
+\end{itemize}
+
+注意，<result> 中的 property 要和对象中的属性名相同，而实际上，MyBatis 会将这两者都转换为大写进行判断。
+
+我们知道，sql 语句是不区分大小写的，采用下划线命名，而 Java 属性一般采用小驼峰命名。MyBatis 十分贴心地为提供了一个全局属性 mapUnderscoreToCamelCase, 通过配置这个属性可以自动映射这两种命名。在 mybatis-config 文件中可以开启该属性:
+
+\begin{xml}
+<settings>
+    <setting name="mapUnderscoreToCamelCase" value="true"/>
+</settings>
+\end{xml}
+
+于是，我们就可以这样写了:
+\begin{xml}
+<select id="selectAll" resultType="learn.mybatis.simple.model.SysUser">
+    SELECT id,
+           user_name,
+           user_password,
+           user_email,
+           user_info,
+           head_img,
+           create_time
+    FROM sys_user
+</select>
+\end{xml}
+
+当然，也可以直接 select *, 但出于性能考虑，最好不要这样做。
+
+
+\newpage
