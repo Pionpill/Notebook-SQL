@@ -8,7 +8,7 @@
     \item 映射: 编写 mapper 文件，统一管理 sql 语句。
     \item 编码: 在程序中获取并执行 SqlSession 语句。
 \end{itemize}
-
+K)
 \subsubsection{mybatis-config 配置文件}
 
 使用 XML 形式进行配置，需要在 src/main/resources 下创建 mybatis-config.xml 文件\footnote{该配置来自MyBatis官网，包含了必要的配置信息，详细标签: \url{https://mybatis.net.cn/configuration.html}}:
@@ -192,6 +192,15 @@ public interface UserMapper {
 
 更多标签的作用请查看官网文档，这里不再说明。
 
+在使用时，我们只需要获通过 sqlSession 的 getMapper 获取接口对应的对象即可。
+
+\begin{Java}
+UserMapper userMapper = sqlSession.getMapper(UserMapper.class);
+userMapper.selectAll();
+\end{Java}
+
+这里我们明明没有手动实现 UserMapper 接口，为什么就能用了呢？当然是动态代理，具体实现方法另查资料。
+
 \subsubsection{查询多个结果}
 
 加入我们查询的结果不是单个对象而是对象集，例如在 UserMapper.java 中添加如下方法:
@@ -238,18 +247,216 @@ List<SysUser> selectAll();
 于是，我们就可以这样写了:
 \begin{xml}
 <select id="selectAll" resultType="learn.mybatis.simple.model.SysUser">
-    SELECT id,
-           user_name,
-           user_password,
-           user_email,
-           user_info,
-           head_img,
-           create_time
+    SELECT id, user_name, user_password, user_email, user_info, head_img, create_time
     FROM sys_user
 </select>
 \end{xml}
 
 当然，也可以直接 select *, 但出于性能考虑，最好不要这样做。
 
+\subsubsection{处理复杂返回值}
+
+前面的例子返回的都是一个表中的单个或多个数据，如果返回的数据中包含不止一个表中的结果，那么应该如何处理 resultType 呢? 例如如下语句:
+
+\begin{sql}
+SELECT r.id, r.role_name, r.enabled, r.create_by, r.create_time, u.user_name, u.user_email
+FROM sys_user AS u,
+     sys_user_role AS ur,
+     sys_role AS r
+         INNER JOIN ur on u.id = ur.user_id
+         INNER JOIN r on ur.role_id = r.id
+WHERE u.id = #{userId}
+\end{sql}
+
+这里有两种处理方式，一种是在 SysRole 对象中直接添加 userName 属性，这样仍然可以返回，但破坏了原对象，更推荐的方法是继承一个新的对象:
+
+\begin{Java}
+public class SysRoleExtend extends SysRole{
+    private String userName;
+    // getter setter 方法
+}
+\end{Java}
+
+这种方式比较适合在需要少量字段时使用，但如果需要大量字段，就不适用了。
+
+第二种方法，是直接让 SysRole 包含一个 SysUser 对象，然后修改对应的 XML 配置:
+
+\begin{Java}
+public class SysRole {
+    // 其他字段
+    private SysUser user;
+}
+\end{Java}
+
+\begin{xml}
+<select id="selectRolesByUserId" resultType="learn.mybatis.simple.model.SysRole">
+    SELECT r.id, r.role_name, r.enabled, r.create_by, r.create_time, u.user_name as "user.userName", u.user_email as "user.userEmail"
+    FROM sys_user AS u,
+        sys_user_role AS ur,
+        sys_role AS r
+            INNER JOIN ur on u.id = ur.user_id
+            INNER JOIN r on ur.role_id = r.id
+    WHERE u.id = #{userId}
+</select>
+\end{xml}
+
+\subsection{INSERT 用法}
+
+INSERT 的用法和 SELECT 类似:
+
+\begin{Java}
+int insert(SysUser sysUser);
+\end{Java}
+
+\begin{xml}
+<insert id="insert">
+    insert into sys_user(id, user_name, user_password, user_email, user_info, head_img, create_time)
+    values (#{id}, #{userName}, #{userPassword}, #{userEmail}, #{userInfo}, #{headImg, jdbcType=BLOB}, #{createTime, jdbcType=TIMESTAMP})
+</insert>
+\end{xml}
+
+\begin{Java}
+@Test
+public void testInsert() {
+    SqlSession sqlSession = this.getSqlSession();
+    try {
+        UserMapper userMapper = sqlSession.getMapper(UserMapper.class);
+        SysUser user = new SysUser();
+        user.setUserName("test");
+        user.setUserPassword("123456");
+        user.setUserEmail("test@mybatis.com");
+        user.setUserInfo("test info");
+        user.setHeadImg(new byte[]{1,2,3});
+        user.setCreateTime(new Date());
+        int result = userMapper.insert(user);
+        Assert.assertEquals(1, result);
+        Assert.assertNull(user.getId());
+    } finally {
+        // 不影响其他测试，这里回滚
+        sqlSession.rollback();
+        sqlSession.close();
+    }
+}
+\end{Java}
+
+这里有两个要点，一是在映射文件中，为了防止类型错误，对于一些特殊的数据类型，建议指定具体的 jdbcType 值。例如 headImg 对应 BLOB, createTime 对应 TIMESTAMP。
+\begin{itemize}
+    \item BLOB对应的类型是ByteArrayInputStream，就是二进制数据流。
+    \item date、time、datetime对应的JDBC类型分别为DATE、TIME、TIMESTAMP。
+\end{itemize}
+
+此外的，我们会发现 insert 的默认返回值类型为 int，也即插入的数据条数。
+
+有些情况下，我们需要指定返回值以方便后续操作，例如主键自增的情况下，可以这样编写映射文件:
+\begin{xml}
+<insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    <!-- 由于主键自增，删除insert 中的 id -->
+</insert>
+\end{xml}
+
+useGeneratedKeys设置为true后，MyBatis会使用JDBC的getGeneratedKeys方法来取出由数据库内部生成的主键。获得主键值后将其赋值给keyProperty配置的id属性。当需要设置多个属性时，使用逗号隔开，这种情况下通常还需要设置 keyColumn 属性，按顺序指定数据库的列，这里列的值会和keyProperty配置的属性一一对应。
+
+但这种写法只适用于支持自增的数据库，比如 Oracle 就不支持主键自增，而是使用序列获取 id。对此可以使用另一种方法 <selectKey>，可以处理自增和序列赋值两种情况。
+
+\begin{xml}
+<insert id="insert3">
+    insert into sys_user(user_name, user_password, user_email, user_info, head_img, create_time)
+    values (#{userName}, #{userPassword}, #{userEmail}, #{userInfo}, #{headImg, jdbcType=BLOB}, #{createTime, jdbcType=TIMESTAMP}
+    <selectKey keyColumn="id" resultType="long" keyProperty="id" order="AFTER">
+        SELECT LAST_INSERT_ID()
+    </selectKey>
+</insert>
+\end{xml}
+
+其他属性不再说明，order属性的设置和使用的数据库有关。在MySQL数据库中，order属性设置的值是AFTER，因为当前记录的主键值在insert语句执行成功后才能获取到。而在Oracle数据库中，order的值要设置为BEFORE，这是因为Oracle中需要先从序列获取值，然后将值作为主键插入到数据库中。
+
+MySQL中的SQL语句SELECT LAST\_INSERT\_ID（）用于获取数据库中最后插入的数据的 ID 值。其他数据对应的语句需要自行查阅。
+
+\subsection{UPDATE 与 DELETE 用法}
+
+UPDATE 用法和前面类似，这里只给出映射文件片段:
+
+\begin{xml}
+<update id="updateById">
+    update sys_user
+    set user_name     = #{userName},
+        user_password = #{userPassword},
+        user_email    = #{userEmail},
+        user_info     = #{userInfo},
+        head_img      = #{headImg, jdbcType=BLOB},
+        create_time=#{createTime, jdbcType=TIMESTAMP}
+    where id = #{id}
+</update>
+\end{xml}
+
+DELETE 更简单:
+
+\begin{xml}
+<delete id="deleteById">
+    delete from sys_user where id = #{id}
+</delete>
+\end{xml}
+
+\subsection{多个接口参数的用法}
+
+参数的类型可以分为两种: 一种是基本数据类型，一种是 JavaBean。
+\begin{itemize}
+    \item 基本类型: 在 XML 文件中对应的 SQL 语句只会使用一个参数，例如 delete 方法。
+    \item JavaBean: 在 XML 文件中对应的 SQL 语句会有多个参数，例如 insert, update 方法。
+\end{itemize}
+
+之前我们都是将多个参数合并到一个 JavaBean 中，并使用这个 JavaBean 作为接口方法的参数。参数较少的时候，为此创建一个新的 JavaBean 就显得浪费，有两种方式解决这个问题: 使用 Map 类型作为参数或者使用 @Param 注解。
+
+使用Map类型作为参数的方法，就是在Map中通过key来映射XML中SQL使用的参数值名字，value用来存放参数值，需要多个参数时，通过Map的key-value方式传递参数值，由于这种方式还需要自己手动创建Map以及对参数进行赋值，其实并不简洁，所以对这种方式掠过。
+
+首先对不加 @param 的代码进行测试:
+
+\begin{Java}
+List<SysRole> selectRolesByUserIdAndRoleEnabled(Long userId, Integer enabled);
+\end{Java}
+
+\begin{xml}
+<select id="selectRolesByUserIdAndRoleEnabled" resultType="learn.mybatis.simple.model.SysRole">
+    select r.id, r.role_name, r.enabled, r.create_by, r.reate_time
+    from sys_user as u,
+        sys_user_role as ur,
+        sys_role as r
+             inner join ur on u.id = ur.user_id
+             inner join r on ur.role_id = r.id
+    where u.id = #{userId}
+        and r.enabled = #{enabled}
+</select>
+\end{xml}
+
+对他进行测试会显示如下错误:
+\begin{xml}
+Parameter 'userId' not found
+Available parameters are [0,1,param1,param2]
+\end{xml}
+
+这时如果将XML中的＃{userId}改为＃{0}或＃{param1}，将＃{enabled}改为＃{1}或＃{param2}，这个方法就可以被正常调用了。但并不推荐这样做
+
+正确的方法应该是在接口中加入 @Param 注解:
+
+\begin{Java}
+List<SysRole> selectRolesByUserIdAndRoleEnabled(
+    @Param("userId") Long userId, 
+    @Param("enabled") Integer enabled);
+\end{Java}
+
+这时的XML文件中对应的SQL的可用参数变成了[userId，enabled，param1，param2]，如果把＃{userId}改为＃{param1}，把＃{enabled}改为＃{param2}，测试也可以通过。
+
+给参数配置@Param注解后，MyBatis就会自动将参数封装成Map类型，@Param注解值会作为Map中的key，因此在SQL部分就可以通过配置的注解值来使用参数。
+
+当只有一个参数（基本类型或拥有TypeHandler配置的类型）的时候，为什么可以不使用注解？这是因为在这种情况下（除集合和数组外），MyBatis不关心这个参数叫什么名字就会直接把这个唯一的参数值拿来使用。
+
+但！如果包含多个 JavaBean 对象，比如:
+\begin{Java}
+List<SysRole> selectRolesByUserIdAndRoleEnabled(
+    @Param("user") SysUser user, 
+    @Param("role") SysRole role);
+\end{Java}
+
+就不能直接在映射文件中使用 \#{userId} 和 \#{enabled}，毕竟没法确定这些属性只有一个，需要使用 \#{user.id} 和 \#{role.enabled} 从两个 JavaBean 中去除指定属性的值。
 
 \newpage
