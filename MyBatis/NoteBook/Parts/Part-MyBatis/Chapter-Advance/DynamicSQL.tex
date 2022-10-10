@@ -1,0 +1,114 @@
+\section{MyBatis 动态 SQL}
+
+MyBatis3采用了功能强大的OGNL（Object-Graph Navigation Language）表达式语言消除了许多其他标签。以下是 MyBatis3 的动态 SQL 在 XML 中支持的几种标签: if, choose(when, otherwise), trim(where, set), foreach, bind。
+
+\subsection{IF 用法}
+
+if 标签通常用于 WHERE，UPDATE，INSERT 语句中用于判断字段。
+
+\subsubsection*{WHERE 中的 IF}
+
+如果我们有这样的需求: 实现一个用户管理高级查询功能，根据输入的条件去检索用户信息。
+\begin{itemize}
+    \item 当只输入用户名时，需要根据用户名进行模糊查询；
+    \item 当只输入邮箱时，根据邮箱进行完全匹配；
+    \item 当同时输入用户名和邮箱时，用这两个条件去查询匹配的用户。
+\end{itemize}
+
+如果仅使用 MySQL 的语法，无法在一句语句中完成三种条件下的需求，需要通过 Java 程序进行判断后选择合适的 SQL 语句执行。但 MyBatis 使用 IF 标签可以在一句语句中完成该任务。
+
+\begin{xml}
+<select id="selectByUser" resultType="learn.mybatis.simple.model.SysUser">
+    SELECT id, user_name, user_password, user_email, user_info, head_img, create_time
+    FROM sys_user
+    WHERE 1 = 1
+    <if test="userName != null and userName !=''">
+        AND user_name like concat('%',#{userName},'%')
+    </if>
+    <if test="userEmail != null and userEmail != ''">
+        AND user_email = #{userEmail}
+    </if>
+</select>
+\end{xml}
+
+test的属性值是一个符合OGNL要求的判断表达式，表达式的结果可以是true或false，除此之外所有的非0值都为true，只有0为false。建议只用true或false作为结果。
+
+OGNL 的详细用法会在下文介绍，判断条件 property == null 对任何类型字段都适用， property == '' 仅适用于 String 类型的字段。当有多个判断条件时可以用 and 或 or 进行连接。
+
+注意 1=1 的条件 可以避免 SQL 语法错误导致的异常，这种写法将在下文被取代。
+
+\subsubsection*{UPDATE 中的 IF}
+
+现在要实现这样一个需求：只更新有变化的字段。需要注意，更新的时候不能将原来有值但没有发生变化的字段更新为空或null。通过if标签可以实现这种动态列更新。
+
+一般情况下，MyBatis中选择性更新的方法名会以Selective作为后缀。在UserMapper.xml中添加对应的SQL语句，代码如下:
+
+\begin{xml}
+<update id="updateByIdSelective">
+    UPDATE sys_user
+    SET
+    <if test="userName != null and userName != ''">
+        user_name = #{userName},
+    </if>
+    <if test="userPassword != null and userPassword != ''">
+        user_password = #{userPassword},
+    </if>
+    <if test="userEmail != null and userEmail != ''">
+        user_email = #{userEmail},
+    </if>
+    <if test="userInfo != null and userInfo != ''">
+        user_info = #{userInfo},
+    </if>
+    <if test="headImg != null">
+        head_img = #{headImg, jdbcType = BLOB},
+    </if>
+    <if test = "createTime != null">
+        create_time = #{createTime jdbcType = TIMESTAMP},
+    </if>
+    id = #{id}
+    WHERE id = #{id}
+</update>
+\end{xml}
+
+只要注意一下书写顺序，符不符合 sql 语句规范即可。
+
+\subsubsection*{INSERT 中的 IF}
+
+在数据库表中插入数据的时候，如果某一列的参数值不为空，就使用传入的值，如果传入参数为空，就使用数据库中的默认值（通常是空），而不使用传入的空值。使用if就可以实现这种动态插入列的功能。
+
+\begin{xml}
+<insert id="insert2" useGeneratedKeys="true" keyProperty="id">
+    INSERT INTO sys_user (user_name, user_password,
+        <if test="userEmail != null and userEmail != ''">
+            user_email,
+        </if>
+        user_info, head_img, create_time)
+    VALUES (
+        #{userName}, #{userPassword},
+        <if test="userEmail != null and userEmail != ''">
+            #{user_email},
+        </if>
+        #{userEmail}, #{headImg jdbcType=BLOB}, #{createTime jdbcType = TIMESTAMP}
+    )
+</insert>
+\end{xml}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\newpage

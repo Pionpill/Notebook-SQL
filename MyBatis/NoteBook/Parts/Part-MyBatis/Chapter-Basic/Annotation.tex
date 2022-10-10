@@ -101,7 +101,7 @@ public class PrivilegeProvider {
 
 \begin{Java}
 // 使用 @SelectProvider
-@SelectProvider(type = PrivilegeMapper.class, method = "selectById")
+@SelectProvider(type = PrivilegeProvider.class, method = "selectById")
 SysPrivilege selectById(Long id);
 \end{Java}
 
