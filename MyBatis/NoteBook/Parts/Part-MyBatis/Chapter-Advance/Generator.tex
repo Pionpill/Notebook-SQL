@@ -145,6 +145,8 @@ properties 标签用于指定一个需要解析的外部属性文件，引入属
 
 MBG配置中的其他几个标签基本上都是context的子标签，这些子标签（有严格的配置顺序，后面括号中的内容为这些标签可以配置的个数）包括以下几个: property(0+), plugin(0+), commentGenerator(0/1), jdbcConnection(1), javaTypeResolver(0/1), javaModelGenerator(1), sqlMapGenerator(0/1), javaClientGenerator(0/1), table(1+)。
 
+\subsubsection{配置标签}
+
 \subsubsection*{property 标签}
 
 假设数据库中有一个表，名为user info，中间有一个空格。在MySQL中可以使用反单引号“`”作为分隔符，例如`user info`，在SQL Server中则是[user info]。
@@ -213,6 +215,12 @@ plugin 标签用来定义一个插件，用于扩展或修改通过 MBG 生成�
 
 这个是用于连接数据库的标签，基础的四个属性不在说明。该标签还可以接受多个property子标签，这里配置的property属性都会添加到JDBC驱动的属性中。具体的值要看数据库的支持而定。
 
+\subsubsection*{javaTypeResolver 标签}
+
+该标签的配置用来指定JDBC类型和Java类型如何转换，最多可以配置一个。
+
+该标签提供了一个可选的属性 type。另外，和 commentGenerator 类似，该标签提供了默认的实现DEFAULT，一般情况下使用默认即可，需要特殊处理的情况可以通过其他标签配置来解决，不建议修改该属性。
+
 \subsubsection*{javaModelGenerator 标签}
 
 该标签用来控制生成的实体类，根据context标签中配置的defaultModelType属性值的不同，一个表可能会对应生成多个不同的实体类。该标签只有两个必选属性:
@@ -220,3 +228,79 @@ plugin 标签用来定义一个插件，用于扩展或修改通过 MBG 生成�
     \item targetPackage: 生成实体类存放的包名。一般就是放在该包下，实际还会受到其他配置的影响。
     \item targetProject：指定目标项目路径，可以使用相对路径或绝对路径。
 \end{itemize}
+
+该标签还支持以下几个 property 子标签属性:
+\begin{itemize}
+    \item constructorBased: 如果设置为 true 使用构造方法入参，默认为 false，使用 setter 方式入参。
+    \item enableSubPackages: 如果为true，MBG会根据catalog和schema来生成子包。如果为false就会直接使用targetPackage属性。默认为false。
+    \item immutable: 用来配置实体类属性是否可变。如果设置为true，那么constructorBased不管设置成什么，都会使用构造方法入参，并且不会生成setter方法。如果为false，实体类属性就可以改变。默认为false。
+    \item rootClass: 设置所有实体类的基类。如果设置，则需要使用类的全限定名称。并且，如果 MBG 能够加载 rootClass，那么MBG不会覆盖和父类中完全匹配的属性。
+    \item trimStrings：判断是否对数据库查询结果进行trim操作，默认值为false。如果设置为true就会生成如下代码。
+\begin{Java}
+public void setUserName(String userName) {
+    this.userName = userName == null ? null : userName.trim();
+}
+\end{Java}
+\end{itemize}
+
+\begin{xml}
+<javaModelGenerator targetPackage="test.model" targetProject="src\main\java">
+    <property name="trimStrings" value="true"/>
+</javaModelGenerator>
+\end{xml}
+
+\subsubsection*{sqlMapGenerator 标签}
+
+该标签用于配置SQL映射文件的属性，如果targetRuntime设置为MyBatis3，则只有当javaClientGenerator配置需要XML时，该标签才必须配置一个。如果没有配置javaClientGenerator，则使用以下规则。
+
+\begin{itemize}
+    \item 如果指定了一个sqlMapGenerator，那么MBG将只生成XML的SQL映射文件和实体类。
+    \item 如果没有指定sqlMapGenerator，那么MBG将只生成实体类。
+\end{itemize}
+
+该标签有两个必要属性:
+\begin{itemize}
+    \item targetPackage：生成SQL映射文件（XML文件）存放的包名。一般就是放在该包下，实际还会受到其他配置的影响。
+    \item targetProject：指定目标项目路径，可以使用相对路径或绝对路径。
+\end{itemize}
+
+该标签还有一个可选的 property 子标签属性 enableSubPackages，如果为 true，MBG会根据catalog和schema来生成子包。如果为false就会直接用targetPackage属性，默认为false。
+
+\begin{xml}
+<sqlMapGenerator targetPackage="test.xml" targetProject="src\main\resources"/>
+\end{xml}
+
+\subsubsection*{javaClientGenerator 标签}
+
+该标签用于配置Java客户端生成器（Mapper 接口）的属性，如果不配置该标签，就不会生成Mapper接口。该标签有以下3个必选属性。
+
+\begin{itemize}
+    \item type: 用于选择客户端代码（Mapper接口）生成器，用户可以自定义实现，需要继承 AbstractJavaClientGenerator 类，必须有一个默认空的构造方法。该属性提供了以下预设的代码生成器，由于context的targetRuntime的不同，需要指定的属性值也有多不同。
+    \begin{itemize}
+        \item XMLMAPPER: 所有的方法都在XML中，接口调用依赖XML文件。推荐使用，将接口和XML完全分离，容易维护，接口中不出现SQL语句，只在XML中配置SQL，修改SQL时不需要重新编译。
+        \item ANNOTATEDMAPPER：基于注解的Mapper接口，不会有对应的XML映射文件。
+        \item MIXEDMAPPER(MyBatis3)：XML和注解的混合形式。
+    \end{itemize}
+    \item targetPackage：生成 Mapper 接口存放的包名。一般就是放在该包下，实际还会受到其他配置的影响。
+    \item targetProject：指定目标项目路径，可以使用相对路径或绝对路径。
+\end{itemize}
+
+\begin{xml}
+<javaClientGenerator type="XMLMAPPER" targetPackage="test.dao" targetProject="src\main\java"/>
+\end{xml}
+
+\subsubsection{表标签}
+
+table是最重要的一个标签，该标签用于配置需要通过内省数据库的表，只有在table中配置过的表，才能经过上述其他配置生成最终的代码，该标签至少要配置一个，可以配置多个。
+
+table标签有一个必选属性tableName，该属性指定要生成的表名，可以使用SQL通配符匹配多个表。table标签包含了多个可选属性:
+
+\begin{itemize}
+    \item schema: 数据库的 schema，可以使用 SQL 通配符匹配。如果设置了该值，生成 SQL 的表名会变成如 schema.tableName 的形式。
+    \item catalog: 数据库的 catalog, 如果设置了该值，生成 SQL 的表名会变成 catalog.tableName 的形式。
+    ...... 
+\end{itemize}
+
+同时也包含了 <property> 在内的多个子标签。感兴趣自己查吧，太多了不想列。
+
+\newpage

@@ -1,0 +1,145 @@
+\section{MyBatis 高级查询}
+
+\subsection{高级结果映射}
+
+\subsubsection{一对一映射}
+
+一对一映射因为不需要考虑是否存在重复数据，因此使用起来很简单，而且可以直接使用MyBatis的自动映射。
+
+\paragraph*{使用自动映射处理一对一关系}
+
+使用自动映射就是通过别名让MyBatis自动将值匹配到对应的字段上，简单的别名映射如user\_name 对应 userName。
+
+除此之外 MyBatis 还支持复杂的属性映射，可以多层嵌套，例如将role.role\_name映射到role.roleName上。MyBatis会先查找role属性，如果存在role属性就创建role 对象，然后在role 对象中继续查找roleName，将role\_name的值绑定到role对象的roleName属性上。
+
+在 SysUser 中添加属性:
+\begin{Java}
+public class SysUser {
+    private SysRole role;
+    public SysRole getRole() {
+        return role;
+    }
+    public void setRole(SysRole role) {
+        this.role = role;
+    }
+    // 其他代码
+}
+\end{Java}
+
+\begin{xml}
+<select id="selectUserAndRoleById" resultType="learn.mybatis.simple.model.SysUser">
+    SELECT u.id,
+           u.user_name,
+           u.user_password,
+           u.user_email,
+           u.user_info,
+           u.head_img,
+           u.create_time,
+           r.id "role.id",
+           r.role_name "role.roleName",
+           r.enabled "role.enabled",
+           r.create_by "role.createBy",
+           r.create_time "role.createBy"
+    FROM sys_user AS u,
+         sys_role AS r,
+         sys_user_role AS ur
+             INNER JOIN ur on u.id = ur.user_id
+             INNER JOIN r on ur.role_id = r.id
+    WHERE u.id = #{id}
+</select>
+\end{xml}
+
+注意上述方法中sys\_role查询列的别名都是“role.”前缀，通过这种方式将role的属性都映射到了SysUser的role属性上。通过SQL日志可以看到已经查询出的一条数据，MyBatis将这条数据映射到了两个类中，像这种通过一次查询将结果映射到不同对象的方式，称之为关联的嵌套结果映射。
+
+\paragraph*{使用 resultMap 配置一对一映射}
+
+resultMap 方式，除了写起来繁，没其他缺点:
+
+\begin{xml}
+<resultMap id="userRoleMap" type="learn.mybatis.simple.model.SysUser">
+    <id property="id" column="id"/>
+    <result property="userName" column="user_name"/>
+    <result property="userPassword" column="user_password"/>
+    ......
+    <result property="role.id" column="role_id">
+    <result property="role.roleName" column="role_name">
+    <result property="role.enabled" column="enabled">
+    ......
+</resultMap>
+\end{xml}
+
+通过生成器可以生成一些基础代码后进行扩充可以方便一点。
+
+\begin{xml}
+<resultMap id="userRoleMap" type="learn.mybatis.simple.model.SysUser" extends="userMap">
+    <result property="role.id" column="role_id"/>
+    <result property="role.roleName" column="role_roleName"/>
+    <result property="role.enabled" column="role_enabled"/>
+    <result property="role.createBy" column="role_createBy"/>
+    <result property="role.createTime" column="role_create_ime" jdbcType="TIMESTAMP"/>
+</resultMap>
+\end{xml}
+
+\paragraph*{使用 resultMap 的 association 标签配置一对一映射}
+
+在resultMap中，association标签用于和一个复杂的类型进行关联，即用于一对一的关联配置。
+
+在上面配置的基础上，再做修改，改成association标签的配置方式，代码如下：
+
+\begin{xml}
+<resultMap id="userRoleMap" type="learn.mybatis.simple.model.SysUser" extends="userMap">
+    <association property="role" columnPrefix="role_" javaType="learn.mybatis.simple.model.SysRole">
+        <result property="id" column="id"/>
+        <result property="roleName" column="name"/>
+        <result property="enabled" column="enabled"/>
+        <result property="createBy" column="createBy"/>
+        <result property="createTime" column="create_img" jdbcType="TIMESTAMP"/>
+    </association>
+</resultMap>
+\end{xml}
+
+<association> 标签包含如下属性:
+\begin{itemize}
+    \item property: 对应实体类你中的属性名，必填。
+    \item javaType: 属性对应 java 类型。
+    \item resultMap: 使用现有的 resultMap。
+    \item columnPrefix: 配置前缀，下面就不用写了。
+\end{itemize}
+
+\paragraph*{association 标签的嵌套查询}
+
+除了前面3种通过复杂的SQL查询获取结果，还可以利用简单的SQL通过多次查询转换为我们需要的结果，这种方式与根据业务逻辑手动执行多次SQL的方式相像，最后会将结果组合成一个对象。
+
+association 标签的嵌套查询常用的属性如下:
+\begin{itemize}
+    \item select: 另一个映射查询的 id， MyBatis 会额外执行这个查询获取嵌套对象的结果。
+    \item column: 列名，将主查询中列的结果作为嵌套查询的参数，配置方式如: column = {prop = col1m prop2 = col2} prop1 和 prop2 将作为嵌套查询的参数。
+    \item fetchType: 数据加载方式，可选值为 lazy 和 eager，分别为延迟加载和积极加载，这个配置会覆盖全局的lazyLoadingEnabled配置。
+\end{itemize}
+
+使用嵌套查询的方式配置一个和前面功能一样的方法，首先在UserMapper.xml中创建如下的resultMap。
+
+\begin{xml}
+<resultMap id="userRoleMapSelect" type="learn.mybatis.simple.model.SysUser" extends="userMap">
+    <association property="role" column="{id = role_id}" select="learn.mybatis.simple.mapper.RoleMapper.selectRoleById"/>
+</resultMap>
+\end{xml}
+
+然后创建对应的 select 方法:
+
+\begin{xml}
+<select id="selectUserAndRoleByIdSelect" resultMap="userRoleMapSelect">
+    SELECT u.id,
+           u.user_name,
+           u.user_password,
+           u.user_email,
+           u.user_info,
+           u.head_img,
+           u.create_time,
+           ur.role.id
+    FROM sys_user AS u,
+         sys_user_role AS ur
+             INNER JOIN ur on u.id = ur.user_id
+    WHERE u.id = #{id}
+</select>
+\end{xml}
