@@ -37,6 +37,15 @@
 
 笔者为软件工程系在校本科生，有计算机学科理论基础(操作系统，数据结构，计算机网络，编译原理等)，本人在撰写此笔记时已有 Java, MySQL 基础。
 
+本文的参考书籍如下:
+\begin{itemize}
+    \item MyBatis 部分: 《MyBatis 从入门到精通》 刘增辉 2017 第一版。
+    \begin{itemize}
+        \item 这是一本很好的带例子的入门书籍，建议看原文敲代码。
+        \item 本人并没有写后几章内容，分别是插件开发和框架集成，有兴趣请看原书。
+    \end{itemize}
+\end{itemize}
+
 本人的编写及开发环境如下：
 \begin{itemize}
     \item Java: Java11
@@ -60,8 +69,9 @@
 \import{Parts/Part-MyBatis/Chapter-Basic}{Introduction.tex}
 \import{Parts/Part-MyBatis/Chapter-Basic}{XML.tex}
 \import{Parts/Part-MyBatis/Chapter-Basic}{Annotation.tex}
-\chapter{MyBatis 进阶}
-\import{Parts/Part-MyBatis/Chapter-Advance}{DynamicSQL.tex}
-\import{Parts/Part-MyBatis/Chapter-Advance}{Generator.tex}
-\import{Parts/Part-MyBatis/Chapter-Advance}{Query.tex}
+\chapter{MyBatis 核心}
+\import{Parts/Part-MyBatis/Chapter-Core}{DynamicSQL.tex}
+\import{Parts/Part-MyBatis/Chapter-Core}{Generator.tex}
+\import{Parts/Part-MyBatis/Chapter-Core}{Query.tex}
+\import{Parts/Part-MyBatis/Chapter-Core}{Cache.tex}
 \end{document}
