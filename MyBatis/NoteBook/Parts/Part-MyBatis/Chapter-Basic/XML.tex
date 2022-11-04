@@ -9,7 +9,7 @@
     \item 编码: 在程序中获取并执行 SqlSession 语句。
 \end{itemize}
 K)
-\subsubsection{mybatis-config 配置文件}
+\subsubsection*{mybatis-config 配置文件}
 
 使用 XML 形式进行配置，需要在 src/main/resources 下创建 mybatis-config.xml 文件\footnote{该配置来自MyBatis官网，包含了必要的配置信息，详细标签: \url{https://mybatis.net.cn/configuration.html}}:
 
@@ -55,7 +55,7 @@ K)
 </settings>
 \end{xml}
 
-\subsubsection{mapper 映射文件}
+\subsubsection*{mapper 映射文件}
 
 在对应的映射文件中，我们可以添加自定义 sql 语句, 下面是一个例子:
 
@@ -130,7 +130,7 @@ Mapper 代理开发是指结合映射文件与接口的开发方式，它不需�
 
 \subsection{SELECT 用法}
 
-\subsubsection{查询单个结果}
+\subsubsection*{查询单个结果}
 
 首先的，我们需要在 UserMapper.java 接口中声明 SELECT 方法，例如:
 \begin{Java}
@@ -201,7 +201,7 @@ userMapper.selectAll();
 
 这里我们明明没有手动实现 UserMapper 接口，为什么就能用了呢？当然是动态代理，具体实现方法另查资料。
 
-\subsubsection{查询多个结果}
+\subsubsection*{查询多个结果}
 
 加入我们查询的结果不是单个对象而是对象集，例如在 UserMapper.java 中添加如下方法:
 
@@ -254,7 +254,7 @@ List<SysUser> selectAll();
 
 当然，也可以直接 select *, 但出于性能考虑，最好不要这样做。
 
-\subsubsection{处理复杂返回值}
+\subsubsection*{处理复杂返回值}
 
 前面的例子返回的都是一个表中的单个或多个数据，如果返回的数据中包含不止一个表中的结果，那么应该如何处理 resultType 呢? 例如如下语句:
 
